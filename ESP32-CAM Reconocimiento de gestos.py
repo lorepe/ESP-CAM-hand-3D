@@ -1,3 +1,4 @@
+# ...existing code...
 import numpy as np
 import parcial.handDetector as hand
 import cv2
@@ -30,7 +31,7 @@ def calculate_angle(a, b, c):
     mag1 = np.hypot(ba[0], ba[1])
     mag2 = np.hypot(bc[0], bc[1])
     if mag1 * mag2 == 0:
-        return 0
+        return None
     angle = np.degrees(np.arccos(np.clip(dot / (mag1 * mag2), -1.0, 1.0)))
     return int(angle)
 
@@ -48,53 +49,74 @@ finger_names = ["Pulgar", "Indice", "Medio", "Anular", "Meñique"]
 try:
     while True:
         ret, img = cap.read()
+        if not ret:
+            continue
 
-        if ret:
-            img = detector.findHands(img)
-            lmList, bbox = detector.findPosition(img)
+        img = detector.findHands(img)
+        lmList, bbox = detector.findPosition(img)
 
-            if len(lmList) != 0:
-                # Crear diccionario id -> (x,y) por si lmList viene en formato [id, x, y]
-                pos = {lm[0]: (lm[1], lm[2]) for lm in lmList}
+        # Preparar panel negro a la derecha
+        h, w = img.shape[:2]
+        panel_w = 300
+        panel = np.zeros((h, panel_w, 3), dtype=np.uint8)  # negro
+        combined = np.concatenate((img, panel), axis=1)
 
-                fingers = detector.fingersUp()
-                print("Pulgar:", "arriba" if fingers[0] == 1 else "abajo")
-                print("Indice:", "arriba" if fingers[1] == 1 else "abajo")
-                print("Medio:", "arriba" if fingers[2] == 1 else "abajo")
-                print("Anular:", "arriba" if fingers[3] == 1 else "abajo")
-                print("Meñique:", "arriba" if fingers[4] == 1 else "abajo")
-                print()
+        angles = [None]*5
 
-                mensaje = ''.join(map(str, fingers))  # Ejemplo: "10110"
-                arduino.write((mensaje + '\n').encode())  # Enviar con salto de línea
+        if len(lmList) != 0:
+            # Crear diccionario id -> (x,y) por si lmList viene en formato [id, x, y]
+            pos = {lm[0]: (lm[1], lm[2]) for lm in lmList}
 
-                # Dibujar estado y ángulo de cada dedo en la imagen
-                y0 = 30
-                for i in range(5):
-                    name = finger_names[i]
-                    state = "arriba" if fingers[i] == 1 else "abajo"
-                    angle = 0
-                    # Si tenemos las coordenadas necesarias, calcular ángulo
-                    inds = finger_indices.get(i)
-                    if inds and all(idx in pos for idx in inds):
-                        mcp = pos[inds[0]]
-                        pip = pos[inds[1]]
-                        tip = pos[inds[2]]
-                        angle = calculate_angle(mcp, pip, tip)
-                        # Dibujar círculos en pip y tip
-                        cv2.circle(img, (pip[0], pip[1]), 5, (0, 255, 0), cv2.FILLED)
-                        cv2.circle(img, (tip[0], tip[1]), 5, (0, 0, 255), cv2.FILLED)
+            fingers = detector.fingersUp()
+            mensaje = ''.join(map(str, fingers))  # Ejemplo: "10110"
+            arduino.write((mensaje + '\n').encode())  # Enviar con salto de línea
 
-                    text = f"{name}: {state} {angle}°"
-                    cv2.putText(img, text, (10, y0 + i*25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # Calcular ángulos y dibujar marcadores en la imagen
+            for i in range(5):
+                inds = finger_indices.get(i)
+                if inds and all(idx in pos for idx in inds):
+                    mcp = pos[inds[0]]
+                    pip = pos[inds[1]]
+                    tip = pos[inds[2]]
+                    angle = calculate_angle(mcp, pip, tip)
+                    angles[i] = angle
+                    # Dibujar círculos en pip y tip en la imagen original (izquierda)
+                    cv2.circle(combined, (pip[0], pip[1]), 5, (0, 255, 0), cv2.FILLED)
+                    cv2.circle(combined, (tip[0], tip[1]), 5, (0, 0, 255), cv2.FILLED)
 
-            # Mostrar imagen con matplotlib
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            plt.imshow(img_rgb)
-            plt.axis('off')
-            plt.draw()
-            plt.pause(0.001)
-            plt.clf()
+            # Mostrar en terminal los grados (con símbolo y texto "grados" por compatibilidad)
+            for i in range(5):
+                name = finger_names[i]
+                angle = angles[i]
+                if angle is None:
+                    print(f"{name}: N/A")
+                else:
+                    # Imprimir con símbolo y con palabra "grados" por si el símbolo no se muestra bien
+                    print(f"{name}: {angle}°    ({angle} grados)")
+            print()
+
+            # Dibujar texto en el panel negro (a la derecha) en blanco
+            start_x = w + 10  # área del panel empieza en w, dibujamos con offset
+            y0 = 40
+            for i in range(5):
+                name = finger_names[i]
+                state = "arriba" if fingers[i] == 1 else "abajo"
+                angle_text = f"{angles[i]}°" if angles[i] is not None else "N/A"
+                text = f"{name}: {state}  {angle_text}"
+                # cv2.putText se aplica a la imagen combinada; ajustar x en el panel
+                cv2.putText(combined, text, (w + 10, y0 + i*35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
+
+        else:
+            # Si no hay mano detectada, mostrar mensaje en el panel
+            cv2.putText(combined, "No se detecta mano", (w + 10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200,200,200), 2, cv2.LINE_AA)
+
+        # Mostrar imagen combinada con matplotlib (izquierda video, derecha panel negro)
+        img_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+        plt.imshow(img_rgb)
+        plt.axis('off')
+        plt.draw()
+        plt.pause(0.001)
+        plt.clf()
 
 except KeyboardInterrupt:
     pass
@@ -102,3 +124,4 @@ finally:
     cap.release()
     arduino.close()
     cv2.destroyAllWindows()
+# ...existing code...
