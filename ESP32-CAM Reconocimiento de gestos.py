@@ -1,51 +1,54 @@
 import numpy as np
 import parcial.handDetector as hand
-import time
 import cv2
+import matplotlib.pyplot as plt
 import serial
+import time
 
-# Configuración del puerto serie para Arduino
-arduino_port = 'COM10'  # Cambia esto por el puerto de tu Arduino ('/dev/ttyUSB0' en Linux o Mac)
-baud_rate = 9600       # Debe coincidir con el código en el Arduino
-ser = serial.Serial(arduino_port, baud_rate, timeout=1)
-time.sleep(2)  # Espera a que se inicie la conexión con Arduino
+# Inicializa el puerto serial
+arduino = serial.Serial('COM3', 9600)
+time.sleep(2)  # Espera a que se estabilice la conexión
 
-# Abrir una cámara para capturar video
-# url = 'http://192.168.190.134/480x320.jpg'
-url = 'http://192.168.190.134/1600x1200.jpg'
-cap = cv2.VideoCapture(url)
+# Abrir la cámara web local
+cap = cv2.VideoCapture(0)
 
-detector = hand.handDetector()  # Crear un objeto para encontrar puntos de referencia de la mano
+# Verifica que la cámara se haya abierto correctamente
+if not cap.isOpened():
+    print("Error: No se pudo acceder a la cámara web.")
+    exit()
+
+detector = hand.handDetector()
+
+plt.ion()  # Activar modo interactivo de matplotlib
 
 while True:
-    cap.open(url)
-    ret, img = cap.read()  # Captura frame por frame
+    ret, img = cap.read()
 
     if ret:
-        img = detector.findHands(img)  # Buscar mano/s en la imagen
-        lmList, bbox = detector.findPosition(img)  # Devuelve los puntos de referencia y el recuadro que encierra la mano
-        
-        if len(lmList) != 0:  # Verificar si hay mano
-            fingers = detector.fingersUp()  # Verificar si los dedos están levantados
-            
-            # Imprimir el estado de cada dedo individualmente
+        img = detector.findHands(img)
+        lmList, bbox = detector.findPosition(img)
+
+        if len(lmList) != 0:
+            fingers = detector.fingersUp()
             print("Pulgar:", "arriba" if fingers[0] == 1 else "abajo")
             print("Indice:", "arriba" if fingers[1] == 1 else "abajo")
             print("Medio:", "arriba" if fingers[2] == 1 else "abajo")
             print("Anular:", "arriba" if fingers[3] == 1 else "abajo")
             print("Meñique:", "arriba" if fingers[4] == 1 else "abajo")
-            print()  # Agrega una línea en blanco para mejor legibilidad
+            print()
 
-            # Crear el mensaje para enviar a Arduino
-            # Enviamos los valores de los dedos en formato binario (ejemplo: "10101")
-            data_to_send = ''.join(map(str, fingers))  # Convierte la lista [1,0,1,0,1] en "10101"
-            ser.write(data_to_send.encode())  # Envía datos como bytes a Arduino
+            mensaje = ''.join(map(str, fingers))  # Ejemplo: "10110"
+            arduino.write((mensaje + '\n').encode())  # Enviar con salto de línea
 
-        cv2.imshow("Image", img)  # Mostrar imagen
+        # Mostrar imagen con matplotlib
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        plt.imshow(img_rgb)
+        plt.axis('off')
+        plt.draw()
+        plt.pause(0.001)
+        plt.clf()
 
-    if cv2.waitKey(1) == ord('q'):  # Presionar la letra 'q' para cerrar
-        break
-
-cap.release()  # Liberar cámara
-cv2.destroyAllWindows()  # Destruir o cerrar las ventanas
-ser.close()  # Cerrar la conexión serie con Arduino
+# Puedes presionar Ctrl+C para detener el script manualmente
+cap.release()
+arduino.close()
+cv2.destroyAllWindows()
