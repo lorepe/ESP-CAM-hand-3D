@@ -41,10 +41,11 @@ finger_indices = {
     1: (5, 6, 8),    # Indice
     2: (9, 10, 12),  # Medio
     3: (13, 14, 16), # Anular
-    4: (17, 18, 20)  # Meñique
+    4: (17, 18, 20)  # Menique
 }
 
-finger_names = ["Pulgar", "Indice", "Medio", "Anular", "Meñique"]
+# Evitar caracteres no ASCII para cv2.putText: usar "Menique" y la palabra "grados"
+finger_names = ["Pulgar", "Indice", "Medio", "Anular", "Menique"]
 
 try:
     while True:
@@ -69,7 +70,10 @@ try:
 
             fingers = detector.fingersUp()
             mensaje = ''.join(map(str, fingers))  # Ejemplo: "10110"
-            arduino.write((mensaje + '\n').encode())  # Enviar con salto de línea
+            try:
+                arduino.write((mensaje + '\n').encode())  # Enviar con salto de línea
+            except Exception:
+                pass  # si falla el serial, seguir mostrando en pantalla
 
             # Calcular ángulos y dibujar marcadores en la imagen
             for i in range(5):
@@ -84,26 +88,23 @@ try:
                     cv2.circle(combined, (pip[0], pip[1]), 5, (0, 255, 0), cv2.FILLED)
                     cv2.circle(combined, (tip[0], tip[1]), 5, (0, 0, 255), cv2.FILLED)
 
-            # Mostrar en terminal los grados (con símbolo y texto "grados" por compatibilidad)
+            # Mostrar en terminal los grados (solo con la palabra "grados")
             for i in range(5):
                 name = finger_names[i]
                 angle = angles[i]
                 if angle is None:
                     print(f"{name}: N/A")
                 else:
-                    # Imprimir con símbolo y con palabra "grados" por si el símbolo no se muestra bien
-                    print(f"{name}: {angle}°    ({angle} grados)")
+                    print(f"{name}: {angle} grados")
             print()
 
-            # Dibujar texto en el panel negro (a la derecha) en blanco
-            start_x = w + 10  # área del panel empieza en w, dibujamos con offset
+            # Dibujar texto en el panel negro (a la derecha) en blanco; usar "grados" para evitar símbolos no soportados
             y0 = 40
             for i in range(5):
                 name = finger_names[i]
                 state = "arriba" if fingers[i] == 1 else "abajo"
-                angle_text = f"{angles[i]}°" if angles[i] is not None else "N/A"
+                angle_text = f"{angles[i]} grados" if angles[i] is not None else "N/A"
                 text = f"{name}: {state}  {angle_text}"
-                # cv2.putText se aplica a la imagen combinada; ajustar x en el panel
                 cv2.putText(combined, text, (w + 10, y0 + i*35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
 
         else:
@@ -122,6 +123,8 @@ except KeyboardInterrupt:
     pass
 finally:
     cap.release()
-    arduino.close()
+    try:
+        arduino.close()
+    except Exception:
+        pass
     cv2.destroyAllWindows()
-# ...existing code...
