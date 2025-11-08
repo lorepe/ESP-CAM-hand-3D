@@ -1,5 +1,5 @@
 import numpy as np
-import parcial.handDetector as hand
+import handDetector as hand
 import cv2
 import matplotlib.pyplot as plt
 import serial
