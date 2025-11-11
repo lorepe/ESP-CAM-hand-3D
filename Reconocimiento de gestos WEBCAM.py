@@ -41,6 +41,21 @@ finger_indices = {
 
 finger_names = ["Pulgar", "Indice", "Medio", "Anular", "Meñique"]
 
+# Diccionario de letras según combinación de dedos arriba/abajo
+letras_señas = {
+    (0,1,1,0,0): "L",
+    (1,1,1,1,1): "A",
+    (0,1,0,0,0): "D",
+    (0,1,1,1,1): "B",
+    (0,0,0,0,1): "I",
+    (0,0,0,0,0): "E",
+    (1,0,0,0,0): "F",
+    (1,1,0,0,0): "G",
+    (0,1,0,1,0): "H",
+    (1,0,1,0,1): "Y",
+    # Puedes agregar más letras aquí
+}
+
 while True:
     ret, img = cap.read()
     if not ret:
@@ -76,6 +91,10 @@ while True:
             print(f"{finger_names[i]}: {estado} - {angulo}")
         print()
 
+        # Detectar letra de señas
+        letra_detectada = letras_señas.get(tuple(fingers), "Desconocida")
+        print(f"Letra detectada: {letra_detectada}")
+
         # Enviar al Arduino
         mensaje = ''.join(map(str, fingers))
         arduino.write((mensaje + '\n').encode())
@@ -87,6 +106,9 @@ while True:
             angulo = f"{angles[i]} grados" if angles[i] is not None else "N/A"
             texto = f"{finger_names[i]}: {estado}  {angulo}"
             cv2.putText(combined, texto, (w + 10, y0 + i*35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+        # Mostrar letra detectada
+        cv2.putText(combined, f"Letra: {letra_detectada}", (w + 10, y0 + 5*35 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
     else:
         cv2.putText(combined, "No se detecta mano", (w + 10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200,200,200), 2)
